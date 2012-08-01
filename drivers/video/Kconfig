@@ -2423,6 +2423,17 @@ config FB_PUV3_UNIGFX
 	  Choose this option if you want to use the Unigfx device as a
 	  framebuffer device. Without the support of PCI & AGP.
 
+config FB_ST7735
+	tristate "ST7735 framebuffer support"
+	depends on FB
+        select FB_SYS_FILLRECT
+        select FB_SYS_COPYAREA
+        select FB_SYS_IMAGEBLIT
+	select FB_DEFERRED_IO
+	select FB_SYS_FOPS
+	help
+	  Support for ST7735 framebuffer device family
+
 source "drivers/video/omap/Kconfig"
 source "drivers/video/omap2/Kconfig"
 
