@@ -1,0 +1,17 @@
+config FB_ST7735
+        tristate "ST7735 framebuffer support"
+        depends on FB
+        select FB_SYS_FILLRECT
+        select FB_SYS_COPYAREA
+        select FB_SYS_IMAGEBLIT
+        select FB_DEFERRED_IO
+        select FB_SYS_FOPS
+        help
+          Support for ST7735 framebuffer device family
+
+config FB_ST7735_MAP
+        tristate "ST7735 framebuffer mapping to SPI0.0"
+        depends on FB_ST7735
+        default n
+        help
+          Include support for an ST7735FB display on SPI0, CS0.
