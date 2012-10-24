@@ -529,13 +529,20 @@ static int __devexit st7735fb_remove(struct spi_device *spi)
 {
 	struct fb_info *info = spi_get_drvdata(spi);
 
-	spi_set_drvdata(spi, NULL);
-
 	if (info) {
+#ifdef __LITTLE_ENDIAN
+		struct st7735fb_par *par = info->par;
+#endif
 		unregister_framebuffer(info);
+		fb_deferred_io_cleanup(info);
 		vfree(info->screen_base);	
 		framebuffer_release(info);
+#ifdef __LITTLE_ENDIAN
+		vfree(par->ssbuf);
+#endif
 	}
+
+	spi_set_drvdata(spi, NULL);
 
 	/* TODO: release gpios */
 
