@@ -2,9 +2,6 @@
 #include <linux/spi/spi.h>
 #include "st7735fb.h"
 
-#define SPI_BUS 	0
-#define SPI_BUS_CS 	0
-#define SPI_BUS_SPEED 	12000000
 
 const char this_driver_name[] = "adafruit_tft18";
 
@@ -24,6 +21,22 @@ static int dc_gpio = CONFIG_FB_ST7735_MAP_DC_GPIO;
 module_param(dc_gpio, int, 0444);
 MODULE_PARM_DESC(dc_gpio, "ST7735 D/C gpio pin number");
 
+static unsigned int spi_bus_num = CONFIG_FB_ST7735_MAP_SPI_BUS_NUM;
+module_param(spi_bus_num, uint, 0444);
+MODULE_PARM_DESC(spi_bus_num, "SPI bus number");
+
+static unsigned int spi_bus_cs = CONFIG_FB_ST7735_MAP_SPI_BUS_CS;
+module_param(spi_bus_cs, uint, 0444);
+MODULE_PARM_DESC(spi_bus_cs, "SPI bus chipselect");
+
+static unsigned int spi_speed_hz = CONFIG_FB_ST7735_MAP_SPI_BUS_SPEED;
+module_param(spi_speed_hz, uint, 0444);
+MODULE_PARM_DESC(spi_speed_hz, "SPI bus clock speed (Hz)");
+
+static unsigned int spi_mode = CONFIG_FB_ST7735_MAP_SPI_BUS_MODE;
+module_param(spi_mode, uint, 0444);
+MODULE_PARM_DESC(spi_mode, "SPI bus mode (0, 1, 2, 3)");
+
 
 static int __init add_st7735fb_device_to_bus(void)
 {
@@ -40,10 +53,10 @@ static int __init add_st7735fb_device_to_bus(void)
 	st7735fb_data.rst_gpio = rst_gpio;
 	st7735fb_data.dc_gpio = dc_gpio;
 
-	spi_master = spi_busnum_to_master(SPI_BUS);
+	spi_master = spi_busnum_to_master(spi_bus_num);
 	if (!spi_master) {
 		printk(KERN_ALERT "spi_busnum_to_master(%d) returned NULL\n",
-			SPI_BUS);
+			spi_bus_num);
 		printk(KERN_ALERT "SPI bus initialised?\n");
 		return -1;
 	}
@@ -56,7 +69,7 @@ static int __init add_st7735fb_device_to_bus(void)
 	}
 
 	/* specify a chip select line */
-	spi_device->chip_select = SPI_BUS_CS;
+	spi_device->chip_select = spi_bus_cs;
 
 	/* Check whether this SPI bus.cs is already claimed */
 	snprintf(buff, sizeof(buff), "%s.%u", 
@@ -83,8 +96,17 @@ static int __init add_st7735fb_device_to_bus(void)
 		} 
 	} else {
 		spi_device->dev.platform_data = &st7735fb_data;
-		spi_device->max_speed_hz = SPI_BUS_SPEED;
-		spi_device->mode = SPI_MODE_3;
+		spi_device->max_speed_hz = spi_speed_hz;
+		switch (spi_mode) {
+			case 0: spi_device->mode = SPI_MODE_0;
+				break;
+			case 1: spi_device->mode = SPI_MODE_1;
+				break;
+			case 2: spi_device->mode = SPI_MODE_2;
+				break;
+			case 3: spi_device->mode = SPI_MODE_3;
+				break;
+		}
 		spi_device->bits_per_word = 8;
 		spi_device->irq = -1;
 		spi_device->controller_state = NULL;
