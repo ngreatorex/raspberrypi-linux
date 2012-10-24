@@ -490,15 +490,16 @@ static int __devinit st7735fb_probe (struct spi_device *spi)
 	par->ssbuf = vmem;
 #endif
 
-	retval = register_framebuffer(info);
-	if (retval < 0)
-		goto fbreg_fail;
-
 	spi_set_drvdata(spi, info);
 
 	retval = st7735fb_init_display(par);
 	if (retval < 0)
 		goto init_fail;
+
+	/* register framebuffer *after* initializing device! */
+	retval = register_framebuffer(info);
+	if (retval < 0)
+		goto fbreg_fail;
 
 	printk(KERN_INFO
 		"fb%d: %s frame buffer device,\n\tusing %d KiB of video memory\n",
@@ -508,11 +509,11 @@ static int __devinit st7735fb_probe (struct spi_device *spi)
 
 
 	/* TODO: release gpios on fail */
-init_fail:
-	spi_set_drvdata(spi, NULL);
-
 fbreg_fail:
 	framebuffer_release(info);
+
+init_fail:
+	spi_set_drvdata(spi, NULL);
 
 fballoc_fail:
 	vfree(vmem);
