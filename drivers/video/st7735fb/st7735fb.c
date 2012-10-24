@@ -250,6 +250,7 @@ static void st7735_run_cfg_script(struct st7735fb_par *par)
 	} while (!end_script);
 }
 
+#if 0 /* st7735_set_addr_win is unused for now */
 static void st7735_set_addr_win(struct st7735fb_par *par,
 				int xs, int ys, int xe, int ye)
 {
@@ -264,6 +265,7 @@ static void st7735_set_addr_win(struct st7735fb_par *par,
 	st7735_write_data(par, 0, 0x00);
 	st7735_write_data(par, 0, ye + ST7735_ROWSTART);
 }
+#endif /* st7735_set_addr_win is unused for now */
 
 static void st7735_reset(struct st7735fb_par *par)
 {
@@ -294,9 +296,13 @@ static void st7735fb_update_display(struct st7735fb_par *par)
 		should be updated.
 	*/
 	/* For now, just write the full 40KiB on each update */
-
-	/* Set row/column data window */
-	st7735_set_addr_win(par, 0, 0, WIDTH-1, HEIGHT-1);
+	/*
+	   Therefore, there is no need to (re-)set addr win here.
+	   We'll need to do that only if/when this routine learns
+	   how to write to a subset of the panel RAM.
+	   Set row/column data window:
+	   st7735_set_addr_win(par, 0, 0, WIDTH-1, HEIGHT-1);
+	*/
 
 	/* Internal RAM write command */
 	st7735_write_cmd(par, 0, ST7735_RAMWR);
