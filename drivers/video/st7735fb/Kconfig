@@ -9,6 +9,14 @@ config FB_ST7735
         help
           Support for ST7735 framebuffer device family
 
+config FB_ST7735_PANEL_TYPE_RED_TAB
+       bool "ST7735 panel is 'red tab' type?"
+       depends on FB_ST7735
+       default y
+       help
+         Choose "y" for a "red tab" ST7735 panel.
+         Choose "n" for a "green tab" ST7735 panel.
+
 config FB_ST7735_MAP
         tristate "ST7735 framebuffer mapping to SPI0.0"
         depends on FB_ST7735

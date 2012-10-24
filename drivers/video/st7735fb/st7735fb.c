@@ -26,6 +26,14 @@
 #include "st7735fb.h"
 
 
+#if ( CONFIG_FB_ST7735_PANEL_TYPE_RED_TAB == 1 )
+# define ST7735_COLSTART 0
+# define ST7735_ROWSTART 0
+#else
+# define ST7735_COLSTART 2
+# define ST7735_ROWSTART 1
+#endif
+
 /*
    The main image transfer SPI clock speed is set up by the st7735fb_map
    module when it opens our spi_device, but the st7735_cfg_script[] init
@@ -80,14 +88,14 @@ static struct st7735_function st7735_cfg_script[] = {
 	{ ST7735_DATA, 0x05},
 	{ ST7735_CMD, ST7735_CASET},
 	{ ST7735_DATA, 0x00},
+	{ ST7735_DATA, 0x00 + ST7735_COLSTART},
 	{ ST7735_DATA, 0x00},
-	{ ST7735_DATA, 0x00},
-	{ ST7735_DATA, 0x7f},
+	{ ST7735_DATA, WIDTH - 1 + ST7735_COLSTART},
 	{ ST7735_CMD, ST7735_RASET},
 	{ ST7735_DATA, 0x00},
+	{ ST7735_DATA, 0x00 + ST7735_ROWSTART},
 	{ ST7735_DATA, 0x00},
-	{ ST7735_DATA, 0x00},
-	{ ST7735_DATA, 0x9f},
+	{ ST7735_DATA, HEIGHT - 1 + ST7735_ROWSTART},
 	{ ST7735_CMD, ST7735_GMCTRP1},
 	{ ST7735_DATA, 0x02},
 	{ ST7735_DATA, 0x1c},
@@ -247,14 +255,14 @@ static void st7735_set_addr_win(struct st7735fb_par *par,
 {
 	st7735_write_cmd(par, 0, ST7735_CASET);
 	st7735_write_data(par, 0, 0x00);
-	st7735_write_data(par, 0, xs+2);
+	st7735_write_data(par, 0, xs + ST7735_COLSTART);
 	st7735_write_data(par, 0, 0x00);
-	st7735_write_data(par, 0, xe+2);
+	st7735_write_data(par, 0, xe + ST7735_COLSTART);
 	st7735_write_cmd(par, 0, ST7735_RASET);
 	st7735_write_data(par, 0, 0x00);
-	st7735_write_data(par, 0, ys+1);
+	st7735_write_data(par, 0, ys + ST7735_ROWSTART);
 	st7735_write_data(par, 0, 0x00);
-	st7735_write_data(par, 0, ye+1);
+	st7735_write_data(par, 0, ye + ST7735_ROWSTART);
 }
 
 static void st7735_reset(struct st7735fb_par *par)
