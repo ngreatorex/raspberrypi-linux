@@ -38,6 +38,9 @@ module_param(spi_mode, uint, 0444);
 MODULE_PARM_DESC(spi_mode, "SPI bus mode (0, 1, 2, 3)");
 
 
+static struct spi_device *st7735fb_mapped_spi_device;
+
+
 static int __init add_st7735fb_device_to_bus(void)
 {
 	struct spi_master *spi_master;
@@ -119,6 +122,8 @@ static int __init add_st7735fb_device_to_bus(void)
 			printk(KERN_ALERT "spi_add_device() failed: %d\n", 
 				status);		
 		}				
+
+		st7735fb_mapped_spi_device = spi_device;
 	}
 
 	put_device(&spi_master->dev);
@@ -129,7 +134,10 @@ module_init(add_st7735fb_device_to_bus);
 
 static void __exit st7735fb_unmap(void)
 {
-	printk(KERN_ALERT "no unmap function written yet - device still registered\n");
+	BUG_ON(!st7735fb_mapped_spi_device);
+	device_del(&st7735fb_mapped_spi_device->dev);
+	spi_dev_put(st7735fb_mapped_spi_device);
+	st7735fb_mapped_spi_device = NULL;
 }
 module_exit(st7735fb_unmap);
 
