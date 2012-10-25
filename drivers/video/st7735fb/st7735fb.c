@@ -419,9 +419,6 @@ static struct fb_deferred_io st7735fb_defio = {
 
 static int __devinit st7735fb_probe (struct spi_device *spi)
 {
-	printk(KERN_ERR
-	       "ST7735FB - loading\n");
-
 	int chip = spi_get_device_id(spi)->driver_data;
 	struct st7735fb_platform_data *pdata = spi->dev.platform_data;
 	int vmem_size = WIDTH*HEIGHT*BPP/8;
@@ -430,6 +427,8 @@ static int __devinit st7735fb_probe (struct spi_device *spi)
 	struct fb_info *info;
 	struct st7735fb_par *par;
 	int retval = -EINVAL;
+
+	pr_debug("ST7735FB - loading\n");
 
 	if (chip != ST7735_DISPLAY_AF_TFT18) {
 		pr_err("%s: only the %s device is supported\n", DRVNAME,
@@ -512,9 +511,10 @@ static int __devinit st7735fb_probe (struct spi_device *spi)
 	if (retval < 0)
 		goto fbreg_fail;
 
-	printk(KERN_INFO
-		"fb%d: %s frame buffer device,\n\tusing %d KiB of video memory\n",
-		info->node, info->fix.id, vmem_size);
+	pr_info("fb%d: %s frame buffer device,\n"
+		"\tusing %d KiB of video memory\n"
+		"\trst_gpio=%d dc_gpio=%d\n",
+		info->node, info->fix.id, vmem_size, par->rst, par->dc);
 
 	return 0;
 
@@ -581,15 +581,13 @@ static struct spi_driver st7735fb_driver = {
 
 static int __init st7735fb_init(void)
 {
-	printk(KERN_ERR
-	       "ST7735FB - init\n");
+	pr_debug("ST7735FB - init\n");
 	return spi_register_driver(&st7735fb_driver);
 }
 
 static void __exit st7735fb_exit(void)
 {
-	printk(KERN_ERR
-	       "ST7735FB - exit\n");
+	pr_debug("ST7735FB - exit\n");
 	spi_unregister_driver(&st7735fb_driver);
 }
 
