@@ -433,10 +433,11 @@ static int __devinit st7735fb_probe (struct spi_device *spi)
 	int chip = spi_get_device_id(spi)->driver_data;
 	struct st7735fb_platform_data *pdata = spi->dev.platform_data;
 	int vmem_size = WIDTH*HEIGHT*BPP/8;
-	u8 *vmem;
+	u8 *vmem = NULL;
+	u16 *ssbuf = NULL;
 	struct fb_info *info;
 	struct st7735fb_par *par;
-	int retval = -ENOMEM;
+	int retval = -EINVAL;
 
 	if (chip != ST7735_DISPLAY_AF_TFT18) {
 		pr_err("%s: only the %s device is supported\n", DRVNAME,
@@ -450,13 +451,20 @@ static int __devinit st7735fb_probe (struct spi_device *spi)
 		return -EINVAL;
 	}
 
+	retval = -ENOMEM;
 	vmem = vzalloc(vmem_size);
 	if (!vmem)
-		return retval;
+		goto alloc_fail;
+#ifdef __LITTLE_ENDIAN
+	/* Allocate swapped shadow buffer */
+	ssbuf = vzalloc(vmem_size);
+	if (!ssbuf)
+		goto alloc_fail;
+#endif
 
 	info = framebuffer_alloc(sizeof(struct st7735fb_par), &spi->dev);
 	if (!info)
-		goto fballoc_fail;
+		goto alloc_fail;
 
 	info->screen_base = (u8 __force __iomem *)vmem;
 	info->fbops = &st7735fb_ops;
@@ -481,14 +489,7 @@ static int __devinit st7735fb_probe (struct spi_device *spi)
 	par->spi = spi;
 	par->rst = pdata->rst_gpio;
 	par->dc = pdata->dc_gpio;
-
-#ifdef __LITTLE_ENDIAN
-	/* Allocate swapped shadow buffer */
-	vmem = vzalloc(vmem_size);
-	if (!vmem)
-		return retval;
-	par->ssbuf = vmem;
-#endif
+	par->ssbuf = ssbuf;
 
 	spi_set_drvdata(spi, info);
 
@@ -515,8 +516,11 @@ fbreg_fail:
 init_fail:
 	spi_set_drvdata(spi, NULL);
 
-fballoc_fail:
-	vfree(vmem);
+alloc_fail:
+	if (ssbuf)
+		vfree(ssbuf);
+	if (vmem)
+		vfree(vmem);
 
 	return retval;
 }
