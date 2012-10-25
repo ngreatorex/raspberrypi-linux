@@ -15,3 +15,19 @@ config FB_ST7735_MAP
         default n
         help
           Include support for an ST7735FB display on SPI0, CS0.
+
+config FB_ST7735_MAP_RST_GPIO
+       int "ST7735 RST gpio pin number"
+       depends on FB_ST7735_MAP
+       default "-1"
+       help
+         Enter the gpio pin number wired to the ST7735 RST pin
+         (or provide the pin number as param ".rst_gpio")
+
+config FB_ST7735_MAP_DC_GPIO
+       int "ST7735 D/C gpio pin number"
+       depends on FB_ST7735_MAP
+       default "-1"
+       help
+         Enter the gpio pin number wired to the ST7735 D/C pin
+         (or provide the pin number as param ".dc_gpio")

@@ -8,10 +8,21 @@
 
 const char this_driver_name[] = "adafruit_tft18";
 
-static struct st7735fb_platform_data st7735fb_data = {
-       .rst_gpio       = 23,
-       .dc_gpio        = 24,
-};
+static struct st7735fb_platform_data st7735fb_data;
+
+/*
+   The RST and DC gpio pin numbers must either be configured as CONFIG_'s
+   or (if the CONFIG_'s are left as -1) then they provided as module
+   params "rst_gpio" and "dc_gpio".
+*/
+
+static int rst_gpio = CONFIG_FB_ST7735_MAP_RST_GPIO;
+module_param(rst_gpio, int, 0444);
+MODULE_PARM_DESC(rst_gpio, "ST7735 RST gpio pin number");
+
+static int dc_gpio = CONFIG_FB_ST7735_MAP_DC_GPIO;
+module_param(dc_gpio, int, 0444);
+MODULE_PARM_DESC(dc_gpio, "ST7735 D/C gpio pin number");
 
 
 static int __init add_st7735fb_device_to_bus(void)
@@ -21,6 +32,13 @@ static int __init add_st7735fb_device_to_bus(void)
 	struct device *pdev;
 	char buff[64];
 	int status = 0;
+
+	if (rst_gpio < 0 || dc_gpio < 0) {
+		printk(KERN_ALERT "params rst_gpio and dc_gpio must be set!\n");
+		return -1;
+	}
+	st7735fb_data.rst_gpio = rst_gpio;
+	st7735fb_data.dc_gpio = dc_gpio;
 
 	spi_master = spi_busnum_to_master(SPI_BUS);
 	if (!spi_master) {
