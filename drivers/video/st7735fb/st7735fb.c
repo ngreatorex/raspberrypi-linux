@@ -25,6 +25,14 @@
 
 #include "st7735fb.h"
 
+
+/*
+   The main image transfer SPI clock speed is set up by the st7735fb_map
+   module when it opens our spi_device, but the st7735_cfg_script[] init
+   sequence will be limited to this rate:
+*/
+#define ST7735_SPI_INITCMD_MAX_SPEED	2000000
+
 static struct st7735_function st7735_cfg_script[] = {
 	{ ST7735_START, ST7735_START},
 	{ ST7735_CMD, ST7735_SWRESET},
@@ -143,23 +151,42 @@ static struct fb_var_screeninfo st7735fb_var __devinitdata = {
 	.nonstd	=		1,
 };
 
-static int st7735_write(struct st7735fb_par *par, u8 data)
+/**
+ * spi_write_at_speed - SPI synchronous write with given SPI clock speed
+ * @spi: device to which data will be written
+ * @speed_hz: SPI clock speed for this message
+ * @buf: data buffer
+ * @len: data buffer size
+ * Context: can sleep
+ *
+ * This writes the buffer and returns zero or a negative error code.
+ * Callable only from contexts that can sleep.
+ */
+static inline int
+spi_write_at_speed(struct spi_device *spi, u32 speed_hz,
+			const void *buf, size_t len)
 {
-	u8 txbuf[2]; /* allocation from stack must go */
+	struct spi_transfer	t = {
+			.tx_buf		= buf,
+			.len		= len,
+			.speed_hz	= speed_hz,
+		};
+	struct spi_message	m;
 
-	txbuf[0] = data;
-
-	return spi_write(par->spi, &txbuf[0], 1);
+	spi_message_init(&m);
+	spi_message_add_tail(&t, &m);
+	return spi_sync(spi, &m);
 }
 
-static void st7735_write_data(struct st7735fb_par *par, u8 data)
+static void st7735_write_data(struct st7735fb_par *par, int initcmd, u8 data)
 {
 	int ret = 0;
+	int speed = initcmd ? ST7735_SPI_INITCMD_MAX_SPEED : 0;
 
 	/* Set data mode */
 	gpio_set_value(par->dc, 1);
 
-	ret = st7735_write(par, data);
+	ret = spi_write_at_speed(par->spi, speed, &data, 1);
 	if (ret < 0)
 		pr_err("%s: write data %02x failed with status %d\n",
 			par->info->fix.id, data, ret);
@@ -171,18 +198,19 @@ static int st7735_write_data_buf(struct st7735fb_par *par,
 	/* Set data mode */
 	gpio_set_value(par->dc, 1);
 
-	/* Write entire buffer */
+	/* Write entire buffer (*/
 	return spi_write(par->spi, txbuf, size);
 }
 
-static void st7735_write_cmd(struct st7735fb_par *par, u8 data)
+static void st7735_write_cmd(struct st7735fb_par *par, int initcmd, u8 data)
 {
 	int ret = 0;
+	int speed = initcmd ? ST7735_SPI_INITCMD_MAX_SPEED : 0;
 
 	/* Set command mode */
 	gpio_set_value(par->dc, 0);
 
-	ret = st7735_write(par, data);
+	ret = spi_write_at_speed(par->spi, speed, &data, 1);
 	if (ret < 0)
 		pr_err("%s: write command %02x failed with status %d\n",
 			par->info->fix.id, data, ret);
@@ -199,11 +227,11 @@ static void st7735_run_cfg_script(struct st7735fb_par *par)
 		case ST7735_START:
 			break;
 		case ST7735_CMD:
-			st7735_write_cmd(par,
+			st7735_write_cmd(par, 1,
 				st7735_cfg_script[i].data & 0xff);
 			break;
 		case ST7735_DATA:
-			st7735_write_data(par,
+			st7735_write_data(par, 1,
 				st7735_cfg_script[i].data & 0xff);
 			break;
 		case ST7735_DELAY:
@@ -219,16 +247,16 @@ static void st7735_run_cfg_script(struct st7735fb_par *par)
 static void st7735_set_addr_win(struct st7735fb_par *par,
 				int xs, int ys, int xe, int ye)
 {
-	st7735_write_cmd(par, ST7735_CASET);
-	st7735_write_data(par, 0x00);
-	st7735_write_data(par, xs+2);
-	st7735_write_data(par, 0x00);
-	st7735_write_data(par, xe+2);
-	st7735_write_cmd(par, ST7735_RASET);
-	st7735_write_data(par, 0x00);
-	st7735_write_data(par, ys+1);
-	st7735_write_data(par, 0x00);
-	st7735_write_data(par, ye+1);
+	st7735_write_cmd(par, 0, ST7735_CASET);
+	st7735_write_data(par, 0, 0x00);
+	st7735_write_data(par, 0, xs+2);
+	st7735_write_data(par, 0, 0x00);
+	st7735_write_data(par, 0, xe+2);
+	st7735_write_cmd(par, 0, ST7735_RASET);
+	st7735_write_data(par, 0, 0x00);
+	st7735_write_data(par, 0, ys+1);
+	st7735_write_data(par, 0, 0x00);
+	st7735_write_data(par, 0, ye+1);
 }
 
 static void st7735_reset(struct st7735fb_par *par)
@@ -265,7 +293,7 @@ static void st7735fb_update_display(struct st7735fb_par *par)
 	st7735_set_addr_win(par, 0, 0, WIDTH-1, HEIGHT-1);
 
 	/* Internal RAM write command */
-	st7735_write_cmd(par, ST7735_RAMWR);
+	st7735_write_cmd(par, 0, ST7735_RAMWR);
 
 	/* Blast framebuffer to ST7735 internal display RAM */
 #ifdef __LITTLE_ENDIAN
