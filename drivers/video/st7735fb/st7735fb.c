@@ -326,14 +326,6 @@ static void st7735fb_deferred_io(struct fb_info *info,
 
 static int st7735fb_init_display(struct st7735fb_par *par)
 {
-	/* TODO: Need some error checking on gpios */
-
-        /* Request GPIOs and initialize to default values */
-        gpio_request_one(par->rst, GPIOF_OUT_INIT_HIGH,
-			"ST7735 Reset Pin");
-        gpio_request_one(par->dc, GPIOF_OUT_INIT_LOW,
-			"ST7735 Data/Command Pin");
-
 	st7735_reset(par);
 
 	st7735_run_cfg_script(par);
@@ -451,6 +443,24 @@ static int __devinit st7735fb_probe (struct spi_device *spi)
 		return -EINVAL;
 	}
 
+	/* Request GPIOs and initialize to default values */
+	retval = gpio_request_one(pdata->rst_gpio, GPIOF_OUT_INIT_HIGH,
+			"ST7735 Reset Pin");
+	if (retval) {
+		pr_err("%s: could not acquire rst_gpio %d\n",
+			DRVNAME, pdata->rst_gpio);
+		return retval;
+	}
+
+	retval = gpio_request_one(pdata->dc_gpio, GPIOF_OUT_INIT_LOW,
+			"ST7735 Data/Command Pin");
+	if (retval) {
+		gpio_free(pdata->dc_gpio);
+		pr_err("%s: could not acquire dc_gpio %d\n",
+			DRVNAME, pdata->dc_gpio);
+		return retval;
+	}
+
 	retval = -ENOMEM;
 	vmem = vzalloc(vmem_size);
 	if (!vmem)
@@ -522,6 +532,9 @@ alloc_fail:
 	if (vmem)
 		vfree(vmem);
 
+	gpio_free(pdata->dc_gpio);
+	gpio_free(pdata->rst_gpio);
+
 	return retval;
 }
 
@@ -540,11 +553,11 @@ static int __devexit st7735fb_remove(struct spi_device *spi)
 #ifdef __LITTLE_ENDIAN
 		vfree(par->ssbuf);
 #endif
+		gpio_free(par->dc);
+		gpio_free(par->rst);
 	}
 
 	spi_set_drvdata(spi, NULL);
-
-	/* TODO: release gpios */
 
 	return 0;
 }
