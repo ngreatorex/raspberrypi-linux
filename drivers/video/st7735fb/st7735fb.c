@@ -86,6 +86,7 @@ static struct st7735_function st7735_cfg_script[] = {
 	{ ST7735_DATA, 0xc8},
 	{ ST7735_CMD, ST7735_COLMOD},
 	{ ST7735_DATA, 0x05},
+#if 0 /* set_addr_win will set these, so no need to set them at init */
 	{ ST7735_CMD, ST7735_CASET},
 	{ ST7735_DATA, 0x00},
 	{ ST7735_DATA, 0x00 + ST7735_COLSTART},
@@ -96,6 +97,7 @@ static struct st7735_function st7735_cfg_script[] = {
 	{ ST7735_DATA, 0x00 + ST7735_ROWSTART},
 	{ ST7735_DATA, 0x00},
 	{ ST7735_DATA, HEIGHT - 1 + ST7735_ROWSTART},
+#endif
 	{ ST7735_CMD, ST7735_GMCTRP1},
 	{ ST7735_DATA, 0x02},
 	{ ST7735_DATA, 0x1c},
@@ -250,7 +252,6 @@ static void st7735_run_cfg_script(struct st7735fb_par *par)
 	} while (!end_script);
 }
 
-#if 0 /* st7735_set_addr_win is unused for now */
 static void st7735_set_addr_win(struct st7735fb_par *par,
 				int xs, int ys, int xe, int ye)
 {
@@ -275,7 +276,6 @@ static void st7735_set_addr_win(struct st7735fb_par *par,
 	    st7735_write_data_buf(par, buf, 4);
 	}
 }
-#endif /* st7735_set_addr_win is unused for now */
 
 static void st7735_reset(struct st7735fb_par *par)
 {
@@ -286,52 +286,93 @@ static void st7735_reset(struct st7735fb_par *par)
 	mdelay(120);
 }
 
-static void st7735fb_update_display(struct st7735fb_par *par)
+static void st7735fb_update_display(struct st7735fb_par *par,
+		const struct fb_fillrect *dirty_rect)
 {
 	int ret = 0;
 	u8 *vmem = par->info->screen_base;
-#ifdef __LITTLE_ENDIAN
 	int i;
-	u16 *vmem16 = (u16 *)vmem;
-	u16 *ssbuf = par->ssbuf;
+	u16 *vmem16;
+	u16 *smem16;
+	int dx, dy, dw, dh;
+	unsigned int vmem_start;
+	unsigned int write_nbytes;
 
-	for (i=0; i<WIDTH*HEIGHT*BPP/8/2; i++)
-		ssbuf[i] = swab16(vmem16[i]);
+	if (dirty_rect) {
+	    dx = dirty_rect->dx;
+	    dy = dirty_rect->dy;
+	    dw = dirty_rect->width;
+	    dh = dirty_rect->height;
+	} else {
+	    dx = dy = 0;
+	    dw = WIDTH;
+	    dh = HEIGHT;
+	}
+
+	/* Load spi_writebuf with image data from the dirty_rect subwindow */
+	vmem_start = (WIDTH*dy + dx)*BPP/8;
+	vmem16 = (u16 *)((u8 *)vmem + vmem_start);
+	smem16 = (u16 *)par->spi_writebuf;
+	for (i=0; i<dh; i++) {
+		int x;
+#ifdef __LITTLE_ENDIAN
+		for (x=0; x<dw; x++)
+		    smem16[x] = swab16(vmem16[x]);
+#else
+		memcpy(smem16, vmem16, dw*2);
 #endif
-	/*
-		TODO:
-		Allow a subset of pages to be passed in
-		(for deferred I/O).  Check pages against
-		pan display settings to see if they
-		should be updated.
-	*/
-	/* For now, just write the full 40KiB on each update */
-	/*
-	   Therefore, there is no need to (re-)set addr win here.
-	   We'll need to do that only if/when this routine learns
-	   how to write to a subset of the panel RAM.
-	   Set row/column data window:
-	   st7735_set_addr_win(par, 0, 0, WIDTH-1, HEIGHT-1);
-	*/
+		smem16 += dw*BPP/16;
+		vmem16 += WIDTH*BPP/16;
+	}
+
+	/* Set the RAM write target window */
+	st7735_set_addr_win(par, dx, dy, dx+dw-1, dy+dh-1);
 
 	/* Internal RAM write command */
 	st7735_write_cmd(par, 0, ST7735_RAMWR);
 
-	/* Blast framebuffer to ST7735 internal display RAM */
-#ifdef __LITTLE_ENDIAN
-	ret = st7735_write_data_buf(par, (u8 *)ssbuf, WIDTH*HEIGHT*BPP/8);
-#else
-	ret = st7735_write_data_buf(par, vmem, WIDTH*HEIGHT*BPP/8);
-#endif
+	/* Blast spi_writebuf to ST7735 internal display RAM target window */
+	write_nbytes = dw*dh*BPP/8;
+	ret = st7735_write_data_buf(par, par->spi_writebuf, write_nbytes);
 	if (ret < 0)
 		pr_err("%s: spi_write failed to update display buffer\n",
 			par->info->fix.id);
+	pr_debug("%s: spi_write_data_buf(%d) returned %d\n",
+			par->info->fix.id, write_nbytes, ret);
 }
 
 static void st7735fb_deferred_io(struct fb_info *info,
 				struct list_head *pagelist)
 {
-	st7735fb_update_display(info->par);
+	struct page *page;
+	int npages = info->fix.smem_len / PAGE_SIZE;
+	int page_low = npages;
+	int page_high = -1;
+	struct fb_fillrect rect;
+
+	list_for_each_entry(page, pagelist, lru) {
+		if ( page_low > page->index )
+		    page_low = page->index;
+		if ( page_high < page->index )
+		    page_high = page->index;
+	}
+
+	if (page_high == -1) {
+		pr_debug("ST7735FB - deferred_io no pages? full update.\n");
+		page_low = 0;
+		page_high = npages - 1;
+	}
+
+	rect.dx = 0;
+	rect.width = WIDTH;
+
+	rect.dy = page_low * PAGE_SIZE / (WIDTH*BPP/8);
+	rect.height = (page_high - page_low + 1) * PAGE_SIZE / (WIDTH*BPP/8);
+
+	pr_debug("ST7735FB - deferred_io page_low=%d page_high=%d dy=%u h=%u\n",
+			page_low, page_high, rect.dy, rect.height);
+
+	st7735fb_update_display(info->par, &rect);
 }
 
 static int st7735fb_init_display(struct st7735fb_par *par)
@@ -347,27 +388,38 @@ void st7735fb_fillrect(struct fb_info *info, const struct fb_fillrect *rect)
 {
 	struct st7735fb_par *par = info->par;
 
+	pr_debug("ST7735FB - fillrect dx=%d dy=%d w=%d h=%d color=0x%x\n",
+		rect->dx, rect->dy, rect->width, rect->height, rect->color);
+
 	sys_fillrect(info, rect);
 
-	st7735fb_update_display(par);
+	st7735fb_update_display(par, rect);
 }
 
 void st7735fb_copyarea(struct fb_info *info, const struct fb_copyarea *area) 
 {
 	struct st7735fb_par *par = info->par;
+	const struct fb_fillrect *rect = (const struct fb_fillrect *)area;
+
+	pr_debug("ST7735FB - copyarea dx=%d dy=%d w=%d h=%d\n",
+		rect->dx, rect->dy, rect->width, rect->height);
 
 	sys_copyarea(info, area);
 
-	st7735fb_update_display(par);
+	st7735fb_update_display(par, rect);
 }
 
 void st7735fb_imageblit(struct fb_info *info, const struct fb_image *image) 
 {
 	struct st7735fb_par *par = info->par;
+	const struct fb_fillrect *rect = (const struct fb_fillrect *)image;
+
+	pr_debug("ST7735FB - imageblit dx=%d dy=%d w=%d h=%d\n",
+		rect->dx, rect->dy, rect->width, rect->height);
 
 	sys_imageblit(info, image);
 
-	st7735fb_update_display(par);
+	st7735fb_update_display(par, rect);
 }
 
 static ssize_t st7735fb_write(struct fb_info *info, const char __user *buf,
@@ -378,6 +430,8 @@ static ssize_t st7735fb_write(struct fb_info *info, const char __user *buf,
 	void *dst;
 	int err = 0;
 	unsigned long total_size;
+
+	pr_debug("ST7735FB - write(count=%zd,ppos=%llu)\n", count, *ppos);
 
 	if (info->state != FBINFO_STATE_RUNNING)
 		return -EPERM;
@@ -407,7 +461,7 @@ static ssize_t st7735fb_write(struct fb_info *info, const char __user *buf,
 	if  (!err)
 		*ppos += count;
 
-	st7735fb_update_display(par);
+	st7735fb_update_display(par, NULL);
 
 	return (err) ? err : count;
 }
@@ -452,7 +506,7 @@ static int __devinit st7735fb_probe (struct spi_device *spi)
 	struct st7735fb_platform_data *pdata = spi->dev.platform_data;
 	int vmem_size = WIDTH*HEIGHT*BPP/8;
 	u8 *vmem = NULL;
-	u16 *ssbuf = NULL;
+	u8 *spi_writebuf = NULL;
 	struct fb_info *info;
 	struct st7735fb_par *par;
 	int retval = -EINVAL;
@@ -493,12 +547,11 @@ static int __devinit st7735fb_probe (struct spi_device *spi)
 	vmem = vzalloc(vmem_size);
 	if (!vmem)
 		goto alloc_fail;
-#ifdef __LITTLE_ENDIAN
-	/* Allocate swapped shadow buffer */
-	ssbuf = vzalloc(vmem_size);
-	if (!ssbuf)
+
+	/* Allocate spi write buffer */
+	spi_writebuf = vzalloc(vmem_size);
+	if (!spi_writebuf)
 		goto alloc_fail;
-#endif
 
 	info = framebuffer_alloc(sizeof(struct st7735fb_par), &spi->dev);
 	if (!info)
@@ -527,7 +580,7 @@ static int __devinit st7735fb_probe (struct spi_device *spi)
 	par->spi = spi;
 	par->rst = pdata->rst_gpio;
 	par->dc = pdata->dc_gpio;
-	par->ssbuf = ssbuf;
+	par->spi_writebuf = spi_writebuf;
 	par->addr_win.xs = par->addr_win.xe =
 		par->addr_win.ys = par->addr_win.ye = -1;
 
@@ -560,8 +613,8 @@ init_fail:
 	spi_set_drvdata(spi, NULL);
 
 alloc_fail:
-	if (ssbuf)
-		vfree(ssbuf);
+	if (spi_writebuf)
+		vfree(spi_writebuf);
 	if (vmem)
 		vfree(vmem);
 
@@ -576,16 +629,12 @@ static int __devexit st7735fb_remove(struct spi_device *spi)
 	struct fb_info *info = spi_get_drvdata(spi);
 
 	if (info) {
-#ifdef __LITTLE_ENDIAN
 		struct st7735fb_par *par = info->par;
-#endif
 		unregister_framebuffer(info);
 		fb_deferred_io_cleanup(info);
 		vfree(info->screen_base);	
 		framebuffer_release(info);
-#ifdef __LITTLE_ENDIAN
-		vfree(par->ssbuf);
-#endif
+		vfree(par->spi_writebuf);
 		gpio_free(par->dc);
 		gpio_free(par->rst);
 	}
