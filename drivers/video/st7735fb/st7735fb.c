@@ -254,16 +254,26 @@ static void st7735_run_cfg_script(struct st7735fb_par *par)
 static void st7735_set_addr_win(struct st7735fb_par *par,
 				int xs, int ys, int xe, int ye)
 {
-	st7735_write_cmd(par, 0, ST7735_CASET);
-	st7735_write_data(par, 0, 0x00);
-	st7735_write_data(par, 0, xs + ST7735_COLSTART);
-	st7735_write_data(par, 0, 0x00);
-	st7735_write_data(par, 0, xe + ST7735_COLSTART);
-	st7735_write_cmd(par, 0, ST7735_RASET);
-	st7735_write_data(par, 0, 0x00);
-	st7735_write_data(par, 0, ys + ST7735_ROWSTART);
-	st7735_write_data(par, 0, 0x00);
-	st7735_write_data(par, 0, ye + ST7735_ROWSTART);
+	unsigned char buf[4] = { 0, 0, 0, 0 };
+
+	if (par->addr_win.xs != xs || par->addr_win.xe != xe) {
+	    par->addr_win.xs = xs;
+	    par->addr_win.xe = xe;
+	    pr_debug("ST7735FB - set_addr_win xs=%d xe=%d\n", xs, xe);
+	    st7735_write_cmd(par, 0, ST7735_CASET);
+	    buf[1] = xs + ST7735_COLSTART;
+	    buf[3] = xe + ST7735_COLSTART;
+	    st7735_write_data_buf(par, buf, 4);
+	}
+	if (par->addr_win.ys != ys || par->addr_win.ye != ye) {
+	    par->addr_win.ys = ys;
+	    par->addr_win.ye = ye;
+	    pr_debug("ST7735FB - set_addr_win ys=%d ye=%d\n", ys, ye);
+	    st7735_write_cmd(par, 0, ST7735_RASET);
+	    buf[1] = ys + ST7735_ROWSTART;
+	    buf[3] = ye + ST7735_ROWSTART;
+	    st7735_write_data_buf(par, buf, 4);
+	}
 }
 #endif /* st7735_set_addr_win is unused for now */
 
@@ -518,6 +528,8 @@ static int __devinit st7735fb_probe (struct spi_device *spi)
 	par->rst = pdata->rst_gpio;
 	par->dc = pdata->dc_gpio;
 	par->ssbuf = ssbuf;
+	par->addr_win.xs = par->addr_win.xe =
+		par->addr_win.ys = par->addr_win.ye = -1;
 
 	info->pseudo_palette = par->pseudo_palette;
 

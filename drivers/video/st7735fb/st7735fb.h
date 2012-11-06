@@ -38,6 +38,12 @@ struct st7735fb_par {
 	u32 pseudo_palette[16];
 	int rst;
 	int dc;
+	struct {
+		int xs;
+		int xe;
+		int ys;
+		int ye;
+	} addr_win;
 };
 
 struct st7735fb_platform_data {
