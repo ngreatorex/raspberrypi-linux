@@ -58,4 +58,4 @@ config FB_ST7735_MAP_SPI_BUS_SPEED
 config FB_ST7735_MAP_SPI_BUS_MODE
        int "ST7735 SPI bus mode (0, 1, 2, or 3)"
        depends on FB_ST7735_MAP
-       default "3"
+       default "0"
