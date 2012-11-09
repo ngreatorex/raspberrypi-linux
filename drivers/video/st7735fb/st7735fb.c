@@ -402,6 +402,24 @@ static ssize_t st7735fb_write(struct fb_info *info, const char __user *buf,
 	return (err) ? err : count;
 }
 
+static int st7735fb_setcolreg(unsigned regno, unsigned red, unsigned green,
+				unsigned blue, unsigned transp,
+				struct fb_info *info)
+{
+	struct st7735fb_par *par = info->par;
+
+	if (regno >= ARRAY_SIZE(par->pseudo_palette))
+		return -EINVAL;
+
+	par->pseudo_palette[regno] =
+		((red   & 0xf800)) |
+		((green & 0xfc00) >>  5) |
+		((blue  & 0xf800) >> 11);
+
+	return 0;
+}
+
+
 static struct fb_ops st7735fb_ops = {
 	.owner		= THIS_MODULE,
 	.fb_read	= fb_sys_read,
@@ -409,6 +427,7 @@ static struct fb_ops st7735fb_ops = {
 	.fb_fillrect	= st7735fb_fillrect,
 	.fb_copyarea	= st7735fb_copyarea,
 	.fb_imageblit	= st7735fb_imageblit,
+	.fb_setcolreg	= st7735fb_setcolreg,
 };
 
 static struct fb_deferred_io st7735fb_defio = {
@@ -499,6 +518,8 @@ static int __devinit st7735fb_probe (struct spi_device *spi)
 	par->rst = pdata->rst_gpio;
 	par->dc = pdata->dc_gpio;
 	par->ssbuf = ssbuf;
+
+	info->pseudo_palette = par->pseudo_palette;
 
 	spi_set_drvdata(spi, info);
 
