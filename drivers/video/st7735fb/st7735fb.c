@@ -157,6 +157,8 @@ static struct fb_var_screeninfo st7735fb_var __devinitdata = {
 	.nonstd	=		1,
 };
 
+static u32 cmap[16] = {0};
+
 /**
  * spi_write_at_speed - SPI synchronous write with given SPI clock speed
  * @spi: device to which data will be written
@@ -402,6 +404,63 @@ static ssize_t st7735fb_write(struct fb_info *info, const char __user *buf,
 	return (err) ? err : count;
 }
 
+static int st7735fb_setcolreg(unsigned regno, unsigned red, unsigned green,
+			    unsigned blue, unsigned transp,
+			    struct fb_info *info)
+{
+	pr_debug("st7735fb_setcolreg called\n");
+
+	/*
+	   In order for the driver to work with fbcon, we need
+	   to create a pseudo palette. This is copied from 
+           skeletonfb.c
+	*/
+
+	/*
+	 * This is the point where the color is converted to something that
+	 * is acceptable by the hardware.
+	 */
+	#define CNVT_TOHW(val,width) ((((val)<<(width))+0x7FFF-(val))>>16)
+	red = CNVT_TOHW(red, info->var.red.length);
+	green = CNVT_TOHW(green, info->var.green.length);
+	blue = CNVT_TOHW(blue, info->var.blue.length);
+	transp = CNVT_TOHW(transp, info->var.transp.length);
+	#undef CNVT_TOHW
+	
+	/* This is the point were you need to fill up the contents of
+	 * info->pseudo_palette. This structure is used _only_ by fbcon, thus
+	 * it only contains 16 entries to match the number of colors supported
+	 * by the console. The pseudo_palette is used only if the visual is
+	 * in directcolor or truecolor mode.  With other visuals, the
+	 * pseudo_palette is not used. (This might change in the future.)
+	 *
+	 * The contents of the pseudo_palette is in raw pixel format.  Ie, each
+	 * entry can be written directly to the framebuffer without any conversion.
+	 * The pseudo_palette is (void *).  However, if using the generic
+	 * drawing functions (cfb_imageblit, cfb_fillrect), the pseudo_palette
+	 * must be casted to (u32 *) _regardless_ of the bits per pixel. If the
+	 * driver is using its own drawing functions, then it can use whatever
+	 * size it wants.
+	 */
+	if (info->fix.visual == FB_VISUAL_TRUECOLOR ||
+	    info->fix.visual == FB_VISUAL_DIRECTCOLOR) {
+		u32 v;
+
+		if (regno >= 16)
+			return -EINVAL;
+
+		v = (red << info->var.red.offset) |
+		    (green << info->var.green.offset) |
+		    (blue << info->var.blue.offset) |
+		    (transp << info->var.transp.offset);
+
+		((u32*)(info->pseudo_palette))[regno] = v;
+	}
+
+	return 0;
+}
+
+
 static struct fb_ops st7735fb_ops = {
 	.owner		= THIS_MODULE,
 	.fb_read	= fb_sys_read,
@@ -409,6 +468,7 @@ static struct fb_ops st7735fb_ops = {
 	.fb_fillrect	= st7735fb_fillrect,
 	.fb_copyarea	= st7735fb_copyarea,
 	.fb_imageblit	= st7735fb_imageblit,
+	.fb_setcolreg   = st7735fb_setcolreg,
 };
 
 static struct fb_deferred_io st7735fb_defio = {
@@ -427,7 +487,7 @@ static int __devinit st7735fb_probe (struct spi_device *spi)
 	struct fb_info *info;
 	struct st7735fb_par *par;
 	int retval = -EINVAL;
-
+	
 	pr_debug("ST7735FB - loading\n");
 
 	if (chip != ST7735_DISPLAY_AF_TFT18) {
@@ -493,6 +553,12 @@ static int __devinit st7735fb_probe (struct spi_device *spi)
 	info->fbdefio = &st7735fb_defio;
 	fb_deferred_io_init(info);
 
+	info->pseudo_palette = cmap;
+
+	/* This has to be done! */
+	if (fb_alloc_cmap(&info->cmap, 256, 0))
+		goto alloc_fail;
+
 	par = info->par;
 	par->info = info;
 	par->spi = spi;
@@ -525,6 +591,8 @@ fbreg_fail:
 
 init_fail:
 	spi_set_drvdata(spi, NULL);
+
+	fb_dealloc_cmap(&info->cmap);
 
 alloc_fail:
 	if (ssbuf)
