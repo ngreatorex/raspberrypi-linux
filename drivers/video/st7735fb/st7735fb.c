@@ -132,8 +132,10 @@ static struct st7735_function st7735_cfg_script[] = {
 	{ ST7735_DATA, 0x00},
 	{ ST7735_DATA, 0x02},
 	{ ST7735_DATA, 0x10},
+#if 0 /* init_display will turn on the display after clearing it */
 	{ ST7735_CMD, ST7735_DISPON},
 	{ ST7735_DELAY, 100},
+#endif
 	{ ST7735_CMD, ST7735_NORON},
 	{ ST7735_DELAY, 10},
 	{ ST7735_END, ST7735_END},
@@ -420,6 +422,25 @@ static int st7735fb_init_display(struct st7735fb_par *par)
 	st7735_reset(par);
 
 	st7735_run_cfg_script(par);
+
+	if ( 1 ) { /* fill display mem with a gradient pattern */
+		u16 *vmem16 = (u16 *)par->info->screen_base;
+		int x, y;
+		for ( y=0; y<HEIGHT; y++ )
+			for ( x=0; x<WIDTH; x++ ) {
+				u16 pixel;
+				pixel = ((WIDTH-x)>>2) << 11
+				      | (x>>2) << 5
+				      | (y>>3) << 0;
+				*vmem16++ = pixel;
+			}
+	}
+
+	/* update the display with the display mem contents, then turn it on */
+	st7735fb_update_display(par, NULL);
+
+	st7735_write_cmd(par, 1, ST7735_DISPON);
+	mdelay(100);
 
 	return 0;
 }
