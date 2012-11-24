@@ -349,6 +349,16 @@ static void st7735fb_deferred_io(struct fb_info *info,
 	int page_low = npages;
 	int page_high = -1;
 	struct fb_fillrect rect;
+	int i;
+
+	for ( i=0; i<npages; i++ ) {
+		struct st7735fb_par *par = info->par;
+		if (test_and_clear_bit(i, &par->deferred_pages_mask)) {
+			if ( page_high == -1 )
+				page_low = i;
+			page_high = i;
+		}
+	}
 
 	list_for_each_entry(page, pagelist, lru) {
 		if ( page_low > page->index )
@@ -375,6 +385,36 @@ static void st7735fb_deferred_io(struct fb_info *info,
 	st7735fb_update_display(info->par, &rect);
 }
 
+
+/* Mark page-size areas as dirty by setting corresponding bit(s) in the
+ * deferred_pages_mask bitmap, then (re-)schedule the deferred_io workqueue
+ * task. */
+static void st7735fb_deferred_io_touch(struct fb_info *info,
+				const struct fb_fillrect *rect)
+{
+	struct fb_deferred_io *fbdefio = info->fbdefio;
+
+	if (!fbdefio)
+		return;
+
+	if (rect) {
+		struct st7735fb_par *par = info->par;
+		unsigned long offset;
+		int index_lo, index_hi, i;
+
+		offset = rect->dy * info->fix.line_length;
+		index_lo = offset >> PAGE_SHIFT;
+		offset = (rect->dy + rect->height - 1) * info->fix.line_length;
+		index_hi = offset >> PAGE_SHIFT;
+
+		for ( i=index_lo; i<=index_hi; i++ )
+			set_bit(i, &par->deferred_pages_mask);
+	}
+
+	schedule_delayed_work(&info->deferred_work, fbdefio->delay);
+}
+
+
 static int st7735fb_init_display(struct st7735fb_par *par)
 {
 	st7735_reset(par);
@@ -386,19 +426,16 @@ static int st7735fb_init_display(struct st7735fb_par *par)
 
 void st7735fb_fillrect(struct fb_info *info, const struct fb_fillrect *rect)
 {
-	struct st7735fb_par *par = info->par;
-
 	pr_debug("ST7735FB - fillrect dx=%d dy=%d w=%d h=%d color=0x%x\n",
 		rect->dx, rect->dy, rect->width, rect->height, rect->color);
 
 	sys_fillrect(info, rect);
 
-	st7735fb_update_display(par, rect);
+	st7735fb_deferred_io_touch(info, rect);
 }
 
 void st7735fb_copyarea(struct fb_info *info, const struct fb_copyarea *area) 
 {
-	struct st7735fb_par *par = info->par;
 	const struct fb_fillrect *rect = (const struct fb_fillrect *)area;
 
 	pr_debug("ST7735FB - copyarea dx=%d dy=%d w=%d h=%d\n",
@@ -406,12 +443,11 @@ void st7735fb_copyarea(struct fb_info *info, const struct fb_copyarea *area)
 
 	sys_copyarea(info, area);
 
-	st7735fb_update_display(par, rect);
+	st7735fb_deferred_io_touch(info, rect);
 }
 
 void st7735fb_imageblit(struct fb_info *info, const struct fb_image *image) 
 {
-	struct st7735fb_par *par = info->par;
 	const struct fb_fillrect *rect = (const struct fb_fillrect *)image;
 
 	pr_debug("ST7735FB - imageblit dx=%d dy=%d w=%d h=%d\n",
@@ -419,13 +455,12 @@ void st7735fb_imageblit(struct fb_info *info, const struct fb_image *image)
 
 	sys_imageblit(info, image);
 
-	st7735fb_update_display(par, rect);
+	st7735fb_deferred_io_touch(info, rect);
 }
 
 static ssize_t st7735fb_write(struct fb_info *info, const char __user *buf,
 		size_t count, loff_t *ppos)
 {
-	struct st7735fb_par *par = info->par;
 	unsigned long p = *ppos;
 	void *dst;
 	int err = 0;
@@ -461,7 +496,7 @@ static ssize_t st7735fb_write(struct fb_info *info, const char __user *buf,
 	if  (!err)
 		*ppos += count;
 
-	st7735fb_update_display(par, NULL);
+	st7735fb_deferred_io_touch(info, NULL); /* TODO: pass dirty rect */
 
 	return (err) ? err : count;
 }

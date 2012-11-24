@@ -44,6 +44,7 @@ struct st7735fb_par {
 		int ys;
 		int ye;
 	} addr_win;
+	volatile long unsigned int deferred_pages_mask;
 };
 
 struct st7735fb_platform_data {
