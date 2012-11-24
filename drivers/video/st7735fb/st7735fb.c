@@ -746,4 +746,7 @@ module_exit(st7735fb_exit);
 
 MODULE_DESCRIPTION("FB driver for ST7735 display controller");
 MODULE_AUTHOR("Matt Porter");
+MODULE_AUTHOR("Neil Greatorex");
+MODULE_AUTHOR("Kamal Mostafa <kamal@whence.com>");
 MODULE_LICENSE("GPL");
+MODULE_VERSION("0.3");

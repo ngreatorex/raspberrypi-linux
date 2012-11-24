@@ -142,8 +142,9 @@ static void __exit st7735fb_unmap(void)
 module_exit(st7735fb_unmap);
 
 MODULE_AUTHOR("Neil Greatorex");
+MODULE_AUTHOR("Kamal Mostafa <kamal@whence.com>");
 MODULE_DESCRIPTION("Bind SPI to st7735fb");
 MODULE_LICENSE("GPL");
-MODULE_VERSION("0.2");
+MODULE_VERSION("0.3");
 
 
