@@ -579,10 +579,20 @@ static struct spi_driver st7735fb_driver = {
 	.remove = __devexit_p(st7735fb_remove),
 };
 
+
+static struct work_struct deferred_register_work;
+
+static void deferred_register( struct work_struct *work )
+{
+	pr_debug("ST7735FB - deferred_register\n");
+	spi_register_driver(&st7735fb_driver);
+}
+
 static int __init st7735fb_init(void)
 {
 	pr_debug("ST7735FB - init\n");
-	return spi_register_driver(&st7735fb_driver);
+	INIT_WORK(&deferred_register_work, deferred_register);
+	return schedule_work(&deferred_register_work);
 }
 
 static void __exit st7735fb_exit(void)
