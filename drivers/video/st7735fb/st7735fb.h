@@ -34,9 +34,17 @@ enum st7735_cmd {
 struct st7735fb_par {
 	struct spi_device *spi;
 	struct fb_info *info;
-	u16 *ssbuf;
+	u8 *spi_writebuf;
+	u32 pseudo_palette[16];
 	int rst;
 	int dc;
+	struct {
+		int xs;
+		int xe;
+		int ys;
+		int ye;
+	} addr_win;
+	volatile long unsigned int deferred_pages_mask;
 };
 
 struct st7735fb_platform_data {

@@ -1,28 +1,34 @@
 config FB_ST7735
         tristate "ST7735 framebuffer support"
-        depends on FB
+        depends on FB && SPI
+        default n
         select FB_SYS_FILLRECT
         select FB_SYS_COPYAREA
         select FB_SYS_IMAGEBLIT
         select FB_DEFERRED_IO
         select FB_SYS_FOPS
+        select SPI_BCM2708	# FIXME: this is needed but doesn't belong here
         help
           Support for ST7735 framebuffer device family
 
 config FB_ST7735_PANEL_TYPE_RED_TAB
-       bool "ST7735 panel is 'red tab' type?"
+       bool "ST7735 'red tab' panel type?"
        depends on FB_ST7735
        default y
        help
+         Different versions of the Adafruit 1.8" ST7735 panel 
+         are indicated by the color of the tab on the removable
+         protective film.
          Choose "y" for a "red tab" ST7735 panel.
          Choose "n" for a "green tab" ST7735 panel.
 
 config FB_ST7735_MAP
-        tristate "ST7735 framebuffer mapping to SPI0.0"
+        tristate "ST7735 framebuffer mapping to GPIO/SPI"
         depends on FB_ST7735
-        default n
+        default FB_ST7735
         help
-          Include support for an ST7735FB display on SPI0, CS0.
+          Include support for an ST7735FB display on selected
+          SPI bus and GPIO pins.
 
 config FB_ST7735_MAP_RST_GPIO
        int "ST7735 RST gpio pin number"
@@ -30,7 +36,7 @@ config FB_ST7735_MAP_RST_GPIO
        default "-1"
        help
          Enter the gpio pin number wired to the ST7735 RST pin
-         (or provide the pin number as param ".rst_gpio")
+         (or leave -1 and set "st7735fb_map.rst_gpio=pinnum")
 
 config FB_ST7735_MAP_DC_GPIO
        int "ST7735 D/C gpio pin number"
@@ -38,7 +44,7 @@ config FB_ST7735_MAP_DC_GPIO
        default "-1"
        help
          Enter the gpio pin number wired to the ST7735 D/C pin
-         (or provide the pin number as param ".dc_gpio")
+         (or leave -1 and set "st7735fb_map.dc_gpio=pinnum")
 
 config FB_ST7735_MAP_SPI_BUS_NUM
        int "ST7735 SPI bus number"
@@ -58,4 +64,4 @@ config FB_ST7735_MAP_SPI_BUS_SPEED
 config FB_ST7735_MAP_SPI_BUS_MODE
        int "ST7735 SPI bus mode (0, 1, 2, or 3)"
        depends on FB_ST7735_MAP
-       default "3"
+       default "0"
