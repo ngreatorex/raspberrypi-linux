@@ -161,8 +161,6 @@ static struct fb_var_screeninfo st7735fb_var __devinitdata = {
 	.nonstd	=		1,
 };
 
-static u32 cmap[16] = {0};
-
 /**
  * spi_write_at_speed - SPI synchronous write with given SPI clock speed
  * @spi: device to which data will be written
@@ -568,7 +566,7 @@ static int __devinit st7735fb_probe (struct spi_device *spi)
 	struct fb_info *info;
 	struct st7735fb_par *par;
 	int retval = -EINVAL;
-	
+
 	pr_debug("ST7735FB - loading\n");
 
 	if (chip != ST7735_DISPLAY_AF_TFT18) {
@@ -633,12 +631,6 @@ static int __devinit st7735fb_probe (struct spi_device *spi)
 	info->fbdefio = &st7735fb_defio;
 	fb_deferred_io_init(info);
 
-	info->pseudo_palette = cmap;
-
-	/* This has to be done! */
-	if (fb_alloc_cmap(&info->cmap, 256, 0))
-		goto alloc_fail;
-
 	par = info->par;
 	par->info = info;
 	par->spi = spi;
@@ -675,8 +667,6 @@ fbreg_fail:
 
 init_fail:
 	spi_set_drvdata(spi, NULL);
-
-	fb_dealloc_cmap(&info->cmap);
 
 alloc_fail:
 	if (spi_writebuf)
